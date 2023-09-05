@@ -1,17 +1,26 @@
 import { useNavigation } from '@react-navigation/native'
 import { VStack, Image, Text, Center, Heading, ScrollView } from 'native-base'
+import { useForm, Controller } from 'react-hook-form'
 
 import LogoSvg from '@assets/logo.svg'
 import backgrounImg from '@assets/background.png'
+
 import { Input } from '@components/Input'
 import { Button } from '@components/Button'
-import { useState } from 'react'
+
+type FormDataProps = {
+  name: string
+  email: string
+  password: string
+  passwordConfirm: string
+}
 
 export function SignUp() {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [passwordConfirm, setPasswordConfirm] = useState('')
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormDataProps>()
 
   const navigation = useNavigation()
 
@@ -19,7 +28,12 @@ export function SignUp() {
     navigation.goBack()
   }
 
-  function handleSignUp() {
+  function handleSignUp({
+    name,
+    email,
+    password,
+    passwordConfirm,
+  }: FormDataProps) {
     console.log({
       name,
       email,
@@ -60,28 +74,76 @@ export function SignUp() {
             Crie sua conta
           </Heading>
 
-          <Input placeholder="Nome" onChangeText={setName} />
-
-          <Input
-            placeholder="E-mail"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            onChangeText={setEmail}
+          <Controller
+            control={control}
+            name="name"
+            rules={{
+              required: 'Informe o nome',
+            }}
+            render={({ field: { value, onChange } }) => (
+              <Input
+                placeholder="Nome"
+                value={value}
+                onChangeText={onChange}
+                errorMessage={errors.name?.message}
+              />
+            )}
           />
 
-          <Input
-            placeholder="Senha"
-            secureTextEntry
-            onChangeText={setPassword}
+          <Controller
+            control={control}
+            name="email"
+            rules={{
+              required: 'Informe o e-mail.',
+              pattern: {
+                value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                message: 'E-mail inválido',
+              },
+            }}
+            render={({ field: { value, onChange } }) => (
+              <Input
+                placeholder="E-mail"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={value}
+                onChangeText={onChange}
+                errorMessage={errors.email?.message}
+              />
+            )}
           />
 
-          <Input
-            placeholder="Confirme a Senha"
-            secureTextEntry
-            onChangeText={setPasswordConfirm}
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { value, onChange } }) => (
+              <Input
+                placeholder="Senha"
+                secureTextEntry
+                value={value}
+                onChangeText={onChange}
+              />
+            )}
           />
 
-          <Button title="Criar e acessar" onPress={handleSignUp} />
+          <Controller
+            control={control}
+            name="passwordConfirm"
+            render={({ field: { value, onChange } }) => (
+              <Input
+                placeholder="Confirme a Senha"
+                secureTextEntry
+                value={value}
+                onChangeText={onChange}
+                onSubmitEditing={handleSubmit(handleSignUp)}
+                returnKeyType="send"
+              />
+            )}
+          />
+
+          <Button
+            title="Criar e acessar"
+            onPress={handleSubmit(handleSignUp)}
+          />
         </Center>
 
         <Button
