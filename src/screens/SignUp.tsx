@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigation } from '@react-navigation/native'
 import {
   VStack,
@@ -8,6 +9,7 @@ import {
   ScrollView,
   useToast,
 } from 'native-base'
+
 import { useForm, Controller } from 'react-hook-form'
 import * as yup from 'yup'
 import { yupResolver } from '@hookform/resolvers/yup'
@@ -17,10 +19,10 @@ import backgrounImg from '@assets/background.png'
 
 import { Input } from '@components/Input'
 import { Button } from '@components/Button'
+
 import { api } from '@services/api'
-import axios from 'axios'
-import { Alert } from 'react-native'
 import { AppError } from '@utils/AppError'
+import { useAuth } from '@hooks/useAuth'
 
 type FormDataProps = {
   name: string
@@ -43,6 +45,12 @@ const signUpSchema = yup.object({
 })
 
 export function SignUp() {
+  const [isLoading, setIsLoading] = useState(false)
+
+  const { signIn } = useAuth()
+  const navigation = useNavigation()
+  const toast = useToast()
+
   const {
     control,
     handleSubmit,
@@ -51,18 +59,19 @@ export function SignUp() {
     resolver: yupResolver(signUpSchema),
   })
 
-  const navigation = useNavigation()
-  const toast = useToast()
-
   function handleGoBack() {
     navigation.goBack()
   }
 
   async function handleSignUp({ name, email, password }: FormDataProps) {
     try {
-      const response = await api.post('/users', { name, email, password })
-      console.log(response.data)
+      setIsLoading(true)
+
+      await api.post('/users', { name, email, password })
+      await signIn(email, password)
     } catch (error) {
+      setIsLoading(false)
+
       const isAppError = error instanceof AppError
       const title = isAppError
         ? error.message
@@ -169,6 +178,7 @@ export function SignUp() {
           <Button
             title="Criar e acessar"
             onPress={handleSubmit(handleSignUp)}
+            isLoading={isLoading}
           />
         </Center>
 

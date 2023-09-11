@@ -1,5 +1,15 @@
+import { useState } from 'react'
 import { useNavigation } from '@react-navigation/native'
-import { VStack, Image, Text, Center, Heading, ScrollView } from 'native-base'
+import {
+  VStack,
+  Image,
+  Text,
+  Center,
+  Heading,
+  ScrollView,
+  useToast,
+} from 'native-base'
+
 import { useForm, Controller } from 'react-hook-form'
 import * as yup from 'yup'
 import { yupResolver } from '@hookform/resolvers/yup'
@@ -8,8 +18,12 @@ import { AuthNavigatorRoutesProps } from '@routes/auth.routes'
 
 import LogoSvg from '@assets/logo.svg'
 import backgrounImg from '@assets/background.png'
+
 import { Input } from '@components/Input'
 import { Button } from '@components/Button'
+
+import { useAuth } from '@hooks/useAuth'
+import { AppError } from '@utils/AppError'
 
 type FormDataProps = {
   email: string
@@ -17,11 +31,17 @@ type FormDataProps = {
 }
 
 const signInSchema = yup.object({
-  email: yup.string().required('Informe o e-mail.').email('E-mail inválido.'),
+  email: yup.string().required('Informe o e-mail.'),
   password: yup.string().required('Informe a senha'),
 })
 
 export function SignIn() {
+  const [isLoading, setIsLoading] = useState(false)
+
+  const { signIn } = useAuth()
+
+  const toast = useToast()
+
   const {
     control,
     handleSubmit,
@@ -36,12 +56,26 @@ export function SignIn() {
     navigation.navigate('signUp')
   }
 
-  function handleSignIn({ email, password }: FormDataProps) {
-    console.log({
-      name,
+  async function handleSignIn({ email, password }: FormDataProps) {
+    try {
+      setIsLoading(true)
 
-      password,
-    })
+      await signIn(email, password)
+    } catch (error) {
+      const isAppError = error instanceof AppError
+
+      const title = isAppError
+        ? error.message
+        : 'Não foi possível entrar. Tente novamente mais tarde.'
+
+      toast.show({
+        title,
+        placement: 'top',
+        bgColor: 'red.500',
+      })
+
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -105,7 +139,11 @@ export function SignIn() {
             )}
           />
 
-          <Button title="Acessar" onPress={handleSubmit(handleSignIn)} />
+          <Button
+            title="Acessar"
+            onPress={handleSubmit(handleSignIn)}
+            isLoading={isLoading}
+          />
         </Center>
 
         <Center mt={24}>
