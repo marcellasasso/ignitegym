@@ -17,7 +17,7 @@ import { yupResolver } from '@hookform/resolvers/yup'
 import { AuthNavigatorRoutesProps } from '@routes/auth.routes'
 
 import LogoSvg from '@assets/logo.svg'
-import backgrounImg from '@assets/background.png'
+import backgroundImg from '@assets/background.png'
 
 import { Input } from '@components/Input'
 import { Button } from '@components/Button'
@@ -85,8 +85,8 @@ export function SignIn() {
     >
       <VStack flex={1} px={10} pb={16}>
         <Image
-          source={backgrounImg}
-          defaultSource={backgrounImg}
+          source={backgroundImg}
+          defaultSource={backgroundImg}
           alt="Pessoas treinando"
           resizeMode={'contain'}
           position={'absolute'}
