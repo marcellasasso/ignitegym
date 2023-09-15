@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { TouchableOpacity } from 'react-native'
 import {
   Center,
@@ -17,6 +17,11 @@ import { yupResolver } from '@hookform/resolvers/yup'
 import * as ImagePicker from 'expo-image-picker'
 import * as FileSystem from 'expo-file-system'
 
+import defaultUserPhotoImg from '@assets/userPhotoDefault.png'
+
+import { api } from '@services/api'
+import { AppError } from '@utils/AppError'
+
 import { useAuth } from '@hooks/useAuth'
 
 import { ScreenHeader } from '@components/ScreenHeader'
@@ -29,9 +34,9 @@ const PHOTO_SIZE = 33
 type FormDataProps = {
   name: string
   email: string
-  oldPassword?: string | null | undefined
-  password?: string | null | undefined
-  confirmPassword?: string | null | undefined
+  old_password?: string | null
+  password?: string | null
+  confirm_password?: string | null
 }
 
 const profileSchema = yup.object({
@@ -40,34 +45,57 @@ const profileSchema = yup.object({
   oldPassword: yup.string().nullable(),
   password: yup
     .string()
-    .min(6, 'A senha deve ter pelo menos 6 dígitos.')
     .nullable()
-    .transform((value) => value || null),
-  confirmPassword: yup
+    .test({
+      name: 'password',
+      test(value, ctx) {
+        const confirmPassword = ctx.parent.confirm_password
+
+        if (confirmPassword?.length && !value?.length) {
+          return ctx.createError({
+            message: 'Informe a senha.',
+          })
+        }
+
+        if (value?.length && value.length < 6) {
+          return ctx.createError({
+            message: 'A senha deve ter pelo menos 6 dígitos.',
+          })
+        }
+
+        return true
+      },
+    }),
+  confirm_password: yup
     .string()
     .nullable()
-    .transform((value) => value || null)
-    .oneOf([yup.ref('password'), null], 'A confirmação de senha não confere.')
-    .when('password', {
-      is: (field: any) => {
-        return field
-      },
-      then: (schema) => {
-        return schema
-          .nullable()
-          .required('Informe a confirmação de senha.')
-          .transform((value) => value || null)
+    .test({
+      name: 'confirm_password',
+      test(value, ctx) {
+        const password = ctx.parent.password
+
+        if (password?.length && !value?.length) {
+          return ctx.createError({
+            message: 'Informe a confirmação de senha.',
+          })
+        }
+
+        if (password?.length && value !== password) {
+          return ctx.createError({
+            message: 'A confirmação de senha não confere.',
+          })
+        }
+
+        return true
       },
     }),
 })
 
 export function Profile() {
+  const [isUpdating, setIsUpdating] = useState(false)
   const [photoIsLoading, setPhotoIsLoading] = useState(false)
-  const [userPhoto, setUserPhoto] = useState(
-    'https://github.com/marcellasasso.png',
-  )
 
-  const { user } = useAuth()
+  const { user, updateUserProfile } = useAuth()
 
   const toast = useToast()
 
@@ -75,13 +103,22 @@ export function Profile() {
     control,
     handleSubmit,
     formState: { errors },
+    clearErrors,
+    reset,
+    watch,
   } = useForm<FormDataProps>({
     defaultValues: {
       name: user.name,
       email: user.email,
+      old_password: null,
+      password: null,
+      confirm_password: null,
     },
     resolver: yupResolver(profileSchema),
   })
+
+  const password = watch('password')
+  const confirmPassword = watch('confirm_password')
 
   async function handleUserPhotoSelect() {
     try {
@@ -111,7 +148,38 @@ export function Profile() {
           })
         }
 
-        setUserPhoto(photoSelected.assets[0].uri)
+        const fileExtension = photoSelected.assets[0].uri.split('.').pop()
+
+        const photoFile = {
+          name: `${user.name}.${fileExtension}`.toLowerCase(),
+          uri: photoSelected.assets[0].uri,
+          type: `${photoSelected.assets[0].type}/${fileExtension}`,
+        } as any
+
+        const userPhotoUploadForm = new FormData()
+
+        userPhotoUploadForm.append('avatar', photoFile)
+
+        const avatarUpdatedResponse = await api.patch(
+          '/users/avatar',
+          userPhotoUploadForm,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          },
+        )
+
+        const userUpdated = user
+        userUpdated.avatar = avatarUpdatedResponse.data.avatar
+
+        await updateUserProfile(userUpdated)
+
+        toast.show({
+          title: 'Foto atualizada com sucesso!',
+          placement: 'top',
+          bgColor: 'green.500',
+        })
       }
     } catch (error) {
       console.log(error)
@@ -121,8 +189,46 @@ export function Profile() {
   }
 
   async function handleProfileUpdate(data: FormDataProps) {
-    console.log(data)
+    try {
+      setIsUpdating(true)
+
+      await api.put('/users', data)
+
+      const userUpdated = user
+      userUpdated.name = data.name
+
+      await updateUserProfile(userUpdated)
+
+      reset()
+
+      toast.show({
+        title: 'Perfil atualizado com sucesso!',
+        placement: 'top',
+        bgColor: 'green.500',
+      })
+    } catch (error) {
+      const isAppError = error instanceof AppError
+
+      const title = isAppError
+        ? error.message
+        : 'Não foi possível alterar os dados. Tente novamente mais tarde.'
+
+      toast.show({
+        title,
+        placement: 'top',
+        bgColor: 'red.500',
+      })
+    } finally {
+      setIsUpdating(false)
+    }
   }
+
+  useEffect(() => {
+    if (!password?.length && !confirmPassword?.length) {
+      clearErrors('password')
+      clearErrors('confirm_password')
+    }
+  }, [clearErrors, password, confirmPassword])
 
   return (
     <VStack flex={1}>
@@ -144,9 +250,13 @@ export function Profile() {
             />
           ) : (
             <UserPhoto
-              source={{
-                uri: userPhoto,
-              }}
+              source={
+                user.avatar
+                  ? {
+                      uri: `${api.defaults.baseURL}/avatar/${user.avatar}`,
+                    }
+                  : defaultUserPhotoImg
+              }
               alt="Imagem do usuário"
               size={PHOTO_SIZE}
             />
@@ -205,12 +315,13 @@ export function Profile() {
 
           <Controller
             control={control}
-            name="oldPassword"
-            render={({ field: { onChange } }) => (
+            name="old_password"
+            render={({ field: { value, onChange } }) => (
               <Input
                 bg={'gray.600'}
                 placeholder="Senha antiga"
                 secureTextEntry
+                value={value || ''}
                 onChangeText={onChange}
               />
             )}
@@ -219,11 +330,12 @@ export function Profile() {
           <Controller
             control={control}
             name="password"
-            render={({ field: { onChange } }) => (
+            render={({ field: { value, onChange } }) => (
               <Input
                 bg={'gray.600'}
                 placeholder="Nova senha"
                 secureTextEntry
+                value={value || ''}
                 onChangeText={onChange}
                 errorMessage={errors.password?.message}
               />
@@ -232,14 +344,15 @@ export function Profile() {
 
           <Controller
             control={control}
-            name="confirmPassword"
-            render={({ field: { onChange } }) => (
+            name="confirm_password"
+            render={({ field: { value, onChange } }) => (
               <Input
                 bg={'gray.600'}
                 placeholder="Confirme a nova senha"
                 secureTextEntry
+                value={value || ''}
                 onChangeText={onChange}
-                errorMessage={errors.confirmPassword?.message}
+                errorMessage={errors.confirm_password?.message}
               />
             )}
           />
@@ -248,6 +361,7 @@ export function Profile() {
             title="Atualizar"
             mt={4}
             onPress={handleSubmit(handleProfileUpdate)}
+            isLoading={isUpdating}
           />
         </Center>
       </ScrollView>
